@@ -1,0 +1,25 @@
+name: 'Build Python packages'
+on:
+  push:
+    branches: [ main, release ]
+  pull_request:
+    branches: main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+  
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Run tests
+        uses: ./
+
+      - name: Upload to PyPi (release only)
+        if: github.ref == 'refs/heads/release'
+        shell: bash
+        run: |
+          python3 setup.py bdist_wheel
+          python3 -m pip install twine
+          python3 -m twine upload --repository pypi -u __token__ -p ${{ secrets.pypi_password }} dist/*.whl
