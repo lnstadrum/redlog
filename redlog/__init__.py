@@ -232,7 +232,7 @@ class Log:
 
             # resolve the thread
             thread = message
-            while thread.pred is not None:
+            while thread is not None and thread.pred is not None:
                 pred_date, pred_idx = thread.pred
 
                 # check for the preceding message in the cache

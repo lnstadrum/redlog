@@ -1,6 +1,6 @@
 # redlog
 
-Yet another logging library in Python. This one writes logs to a Redis database and supports threads of logs messages.
+Yet another logging library in Python. This one writes logs to a Redis database and supports threads of log messages.
 
 ![Screenshot](https://raw.githubusercontent.com/lnstadrum/redlog/main/screenshot.png)
 
