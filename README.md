@@ -19,5 +19,5 @@ thread.info("Client connection: socket opened")
 There are fancy printing/formatting tools too.
 
 ```bash
-python3 console -m redlog --db 15 --last 10m
+python3 -m redlog --db 15 --last 10m
 ```
