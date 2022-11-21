@@ -137,6 +137,16 @@ class LogTest(unittest.TestCase):
             self.assertEqual(msg.update_number, 0)
             self.assertTrue(msg.is_last)
 
+    def test_long_thread(self):
+        """ Making a long thread of messages """
+        self.db.flushdb()
+        log = Log(DB_HOST, DB_PORT, db=DB_INDEX)
+        thread = log.info("start")
+        for i in range(12345):
+            thread.info(f"message #{i}")
+        messages = list(log.read(0, time.time()))
+        self.assertEqual(len(messages), 12345 + 1)
+
     def test_range_filter(self):
         """ Picking messages in a given time range """
         self.db.flushdb()
