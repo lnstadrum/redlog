@@ -8,7 +8,7 @@ with open(os.path.join("README.md"), "r") as file:
 # build package
 setup(
     name="redlog",
-    version="0.9",
+    version="1.0",
     author="lnstadrum",
     author_email="",
     description="Python logger to Redis database with threading support",
