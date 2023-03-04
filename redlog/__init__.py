@@ -107,7 +107,7 @@ class Thread:
     def report_exception(self, message: str, exception: Exception, level=None):
         self.update(
             level or Tag.CRITICAL,
-            f'{message}: {exception}\n' + '\n'.join(traceback.format_tb(exception.__traceback__))
+            f'{message}: {exception} ({exception.__class__.__name__})\n' + '\n'.join(traceback.format_tb(exception.__traceback__))
         )
 
     def __len__(self):
