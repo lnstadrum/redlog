@@ -77,7 +77,7 @@ class Thread:
         # form the value to store in the DB:
         #   | num updates > 0[31] | has next[1] | ms since midnight[4*8] | prev msg key[48] | prev msg idx[32] | tag[8] | message[...]
         self.value = bytearray((self.upd_ctr * 2).to_bytes(4, 'big')            # num updates and 'has next' bit (=0)
-                                + delta.to_bytes(4, 'big')                      # ms since bidnight
+                                + delta.to_bytes(4, 'big')                      # ms since midnight
                                 + self.key.encode()                             # predecessor key
                                 + self.idx.to_bytes(4, 'big')                   # predecessor index
                                 + tag[0].encode() + message.encode('utf-8'))    # tag + message content
@@ -208,13 +208,13 @@ class Log:
     def fetch(self, from_ts: Optional[float] = None, to_ts: Optional[float] = None) -> Generator[Message, None, None]:
         """ Retrieves messages between two given timestamps.
         """
-        if from_ts is None and to_ts is not None:
+        if from_ts is not None and to_ts is not None:
             marks = range(math.floor(from_ts), math.floor(to_ts) + 1, SECONDS_PER_DAY)
             dates = map(lambda t: datetime.utcfromtimestamp(t).strftime(DATE_FORMAT), marks)
         else:
             dates = sorted(map(bytes.decode, self.db.keys()))
 
-        daily_cache = {}   # index => message for messages having predecessors
+        cache = {}   # 'date/index' => message for messages having predecessors
 
         # loop dates
         for date in dates:
@@ -238,8 +238,9 @@ class Log:
                     pred_date, pred_idx = thread.pred
 
                     # check for the preceding message in the cache
-                    if pred_idx in daily_cache:
-                        thread.pred = daily_cache.pop(pred_idx)
+                    cache_key = f"{pred_date}/{pred_idx}"
+                    if cache_key in cache:
+                        thread.pred = cache.pop(cache_key)
                         break
                     else:
                         # not found in the cache; get from the DB
@@ -262,7 +263,6 @@ class Log:
 
                 # put to cache if the current message precedes another one
                 if not message.is_last:
-                    daily_cache[idx] = message
+                    cache[f"{date}/{idx}"] = message
 
                 yield message
-
