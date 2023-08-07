@@ -205,70 +205,64 @@ class Log:
             f'{message}: {exception}\n' + '\n'.join(traceback.format_tb(exception.__traceback__))
         )
 
-    def read_day(self, date: Union[str, int] = 0, time_range: Optional[Tuple[float, float]] = None) -> Generator[Message, None, None]:
-        """ Retrieves all messages at a single given day. Optionally filters by a given time range.
-                date: date in `DATE_FORMAT` format, or integer (0=today, 1=yesterday, etc.)
-                time_range: absolute timestamp range (two-tuple) to pick messages in; can be none
-        """
-        # get key in string format
-        if isinstance(date, int):
-            ts = time.time() - date * SECONDS_PER_DAY
-            date = datetime.utcfromtimestamp(ts).strftime(DATE_FORMAT)
-        midnight = datetime.strptime(date, DATE_FORMAT).timestamp()
-
-        # loop raw messages
-        daily_cache = {}   # index => message for messages having predecessors
-        raw_messages = self.db.lrange(date, 0, -1)
-        for idx, raw in enumerate(raw_messages):
-            # parse message
-            message = Message(raw, midnight)
-
-            # check if within the time_range
-            if time_range:
-                if message.timestamp < time_range[0]:
-                    continue
-                if time_range[1] <= message.timestamp:
-                    break
-
-            # resolve the thread
-            thread = message
-            while thread is not None and thread.pred is not None:
-                pred_date, pred_idx = thread.pred
-
-                # check for the preceding message in the cache
-                if pred_date == date and pred_idx in daily_cache:
-                    thread.pred = daily_cache.pop(pred_idx)
-                    break
-                else:
-                    # not found in the cache; get from the DB
-                    pred_db_record = self.db.lrange(pred_date, pred_idx, pred_idx)
-
-                    # create the preceding message if `pred_db_record` exists (may disappear due to its TTL)
-                    thread.pred = Message(
-                        pred_db_record[0],
-                        datetime.strptime(pred_date, DATE_FORMAT).timestamp(),
-                    ) if pred_db_record else None
-
-                    # check if within the time_range
-                    if time_range and thread.pred.timestamp < time_range[0]:
-                        # if out of bounds, mark the predecessor as existing one but do not keep
-                        thread.pred = True
-                        break
-
-                # loop
-                thread = thread.pred
-
-            # put to cache if the current message preceeds another one
-            if not message.is_last:
-                daily_cache[idx] = message
-
-            yield message
-
-    def read(self, from_ts: float, to_ts: float) -> Generator[Message, None, None]:
+    def fetch(self, from_ts: Optional[float] = None, to_ts: Optional[float] = None) -> Generator[Message, None, None]:
         """ Retrieves messages between two given timestamps.
         """
-        marks = range(math.floor(from_ts), math.floor(to_ts) + 1, SECONDS_PER_DAY)
-        dates = map(lambda t: datetime.utcfromtimestamp(t).strftime(DATE_FORMAT), marks)
-        for day in dates:
-            for message in self.read_day(day, (from_ts, to_ts)):
+        if from_ts is None and to_ts is not None:
+            marks = range(math.floor(from_ts), math.floor(to_ts) + 1, SECONDS_PER_DAY)
+            dates = map(lambda t: datetime.utcfromtimestamp(t).strftime(DATE_FORMAT), marks)
+        else:
+            dates = sorted(map(bytes.decode, self.db.keys()))
+
+        daily_cache = {}   # index => message for messages having predecessors
+
+        # loop dates
+        for date in dates:
+            midnight = datetime.strptime(date, DATE_FORMAT).timestamp()
+
+            # loop raw messages
+            raw_messages = self.db.lrange(date, 0, -1)
+            for idx, raw in enumerate(raw_messages):
+                # parse message
+                message = Message(raw, midnight)
+
+                # check if within the time_range
+                if from_ts is not None and message.timestamp < from_ts:
+                    continue
+                if to_ts is not None and to_ts <= message.timestamp:
+                    break
+
+                # resolve the thread
+                thread = message
+                while thread is not None and thread.pred is not None:
+                    pred_date, pred_idx = thread.pred
+
+                    # check for the preceding message in the cache
+                    if pred_idx in daily_cache:
+                        thread.pred = daily_cache.pop(pred_idx)
+                        break
+                    else:
+                        # not found in the cache; get from the DB
+                        pred_db_record = self.db.lrange(pred_date, pred_idx, pred_idx)
+
+                        # create the preceding message if `pred_db_record` exists (may disappear due to its TTL)
+                        thread.pred = Message(
+                            pred_db_record[0],
+                            datetime.strptime(pred_date, DATE_FORMAT).timestamp()
+                        ) if pred_db_record else None
+
+                        # check if within the time_range
+                        if from_ts is not None and thread.pred.timestamp < from_ts:
+                            # if out of bounds, mark the predecessor as existing one but do not keep
+                            thread.pred = True
+                            break
+
+                    # loop
+                    thread = thread.pred
+
+                # put to cache if the current message precedes another one
+                if not message.is_last:
+                    daily_cache[idx] = message
+
                 yield message
+

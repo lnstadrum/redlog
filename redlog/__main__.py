@@ -68,7 +68,7 @@ if __name__ == "__main__":
     threads = []
 
     # loop the messages
-    for message in log.read(*time_range):
+    for message in log.fetch(*time_range):
         millisec = (message.timestamp % 1) * 1000
         time_mark = datetime.fromtimestamp(message.timestamp).strftime(args.time_format) + ".%03d" % (millisec)
 

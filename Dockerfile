@@ -4,7 +4,6 @@ FROM redis:6.0
 
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt update && apt install -qy python3 python3-pip
-RUN python3 -m pip install setuptools
 
 ADD redlog/ /opt/redlog/
 ADD *.py README.md /opt/
