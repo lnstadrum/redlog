@@ -25,7 +25,7 @@ class LogTest(unittest.TestCase):
             log.info(msg)
         # pop and compare
         msg = None
-        for msg in log.read_day():
+        for msg in log.fetch():
             now = time.time()
             self.assertTrue(now - 1 < msg.timestamp <= now)
             self.assertEqual(msg.tag, Tag.INFO)
@@ -35,7 +35,7 @@ class LogTest(unittest.TestCase):
         self.assertIsNotNone(msg)   # to make sure we ever enter the loop
         # expiration
         time.sleep(1.1)
-        for _ in log.read_day():
+        for _ in log.fetch():
             self.fail("Some messages are not expired in the log")
 
     def test_chaining(self):
@@ -48,7 +48,7 @@ class LogTest(unittest.TestCase):
         log.info("another info!")
         msg.error("error")
         # check
-        messages = list(log.read_day())
+        messages = list(log.fetch())
         self.assertEqual(len(messages), 4)
         # - content
         self.assertEqual(messages[0].content, "info")
@@ -84,38 +84,35 @@ class LogTest(unittest.TestCase):
         msg = log.info("info")
         # cheat: change the date to past
         self.assertTrue(hasattr(msg, 'key'))
-        newkey, _ = Thread._get_key(time.time() - 1234567)
+        now = time.time()
+        newkey, _ = Thread._get_key(now - 1234567)
         self.db.rename(msg.key, newkey)
         msg.key = newkey
         # push more
+        time.sleep(0.001)
         msg.info("another info!")
         log.warning("warn")
         msg.error("error")
         # check
-        messages = list(log.read_day())
+        messages = list(log.fetch(now, now + 123))
         self.assertEqual(len(messages), 3)
         # - predecessors
-        self.assertIsNone(messages[0].pred.pred)
-        self.assertIsNotNone(messages[0].pred)
+        self.assertTrue(messages[0].pred)
         self.assertIsNone(messages[1].pred)
         self.assertEqual(messages[2].pred, messages[0])
         # - content
-        self.assertEqual(messages[0].pred.content, "info")
         self.assertEqual(messages[0].content, "another info!")
         self.assertEqual(messages[1].content, "warn")
         self.assertEqual(messages[2].content, "error")
         # - tag
-        self.assertEqual(messages[0].pred.tag, Tag.INFO)
         self.assertEqual(messages[0].tag, Tag.INFO)
         self.assertEqual(messages[1].tag, Tag.WARNING)
         self.assertEqual(messages[2].tag, Tag.ERROR)
         # - update number
-        self.assertEqual(messages[0].pred.update_number, 0)
         self.assertEqual(messages[0].update_number, 1)
         self.assertEqual(messages[1].update_number, 0)
         self.assertEqual(messages[2].update_number, 2)
         # - is last
-        self.assertFalse(messages[0].pred.is_last)
         self.assertFalse(messages[0].is_last)
         self.assertTrue(messages[1].is_last)
         self.assertTrue(messages[2].is_last)
@@ -129,7 +126,7 @@ class LogTest(unittest.TestCase):
         self.db.flushdb()
         msg.info("new info")
         # check
-        for n, msg in enumerate(log.read_day()):
+        for n, msg in enumerate(log.fetch()):
             self.assertEqual(n, 0)
             self.assertIsNone(msg.pred)
             self.assertEqual(msg.content, "new info")
@@ -144,7 +141,7 @@ class LogTest(unittest.TestCase):
         thread = log.info("start")
         for i in range(12345):
             thread.info(f"message #{i}")
-        messages = list(log.read(0, time.time()))
+        messages = list(log.fetch(0, time.time()))
         self.assertEqual(len(messages), 12345 + 1)
 
     def test_range_filter(self):
@@ -157,8 +154,7 @@ class LogTest(unittest.TestCase):
         time.sleep(0.01)
         log.warning("Second message")
         # check
-        rng = (start_time, time.time())
-        messages = list(log.read_day(0, rng))
+        messages = list(log.fetch(start_time, time.time()))
         self.assertEqual(len(messages), 1)
         self.assertEqual(messages[0].content, "Second message")
         self.assertEqual(messages[0].tag, Tag.WARNING)
